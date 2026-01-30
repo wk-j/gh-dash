@@ -194,9 +194,21 @@ func init() {
 
 		zone.NewGlobal()
 
+		// Open /dev/tty directly to ensure the TUI works even when
+		// stdin/stdout are redirected (e.g., when running from Helix editor)
+		tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			log.Fatal("Failed to open /dev/tty", err)
+		}
+		defer tty.Close()
+
+		// Create termenv output using tty for proper color detection
+		output := termenv.NewOutput(tty)
+		lipgloss.SetDefaultRenderer(lipgloss.NewRenderer(tty, termenv.WithColorCache(true)))
+
 		// see https://github.com/charmbracelet/lipgloss/issues/73
-		lipgloss.SetHasDarkBackground(termenv.HasDarkBackground())
-		markdown.InitializeMarkdownStyle(termenv.HasDarkBackground())
+		lipgloss.SetHasDarkBackground(output.HasDarkBackground())
+		markdown.InitializeMarkdownStyle(output.HasDarkBackground())
 
 		model, logger := createModel(config.Location{RepoPath: repo, ConfigFlag: cfgFlag}, debug)
 		if logger != nil {
@@ -221,6 +233,8 @@ func init() {
 			tea.WithAltScreen(),
 			tea.WithReportFocus(),
 			tea.WithMouseCellMotion(),
+			tea.WithInput(tty),
+			tea.WithOutput(tty),
 		)
 		if _, err := p.Run(); err != nil {
 			log.Fatal("Failed starting the TUI", err)
